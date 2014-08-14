@@ -1,6 +1,6 @@
 walitean
 ========
-walitean - WAL of sqlITE ANalyzer
+walitean - WAL Analyzer for SQLite
 
 WAL Journal Forensic Toolkit
 
