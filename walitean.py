@@ -21,6 +21,7 @@ from sys import argv, exit, stdout, stdin, stderr
 import struct
 import time
 import sqlitePage
+import sqlite3
 
 #struct Write Ahead Log file header {
 # uint signature; // 0x377f0682 or 0x377f0683
@@ -87,8 +88,8 @@ class WAL_SQLITE():
         try:
             self.fhandle = open(filepath, 'rb')
         except:
-        	print 'invalid input file'
-        	return 1
+            print 'invalid input file'
+            return 1
         self.fbuf = self.fhandle.read()
         return self.fbuf
 
@@ -101,26 +102,26 @@ class WAL_SQLITE():
         #print '%x'%fileheader[0]
 
         if (fileheader[0] != 0x377f0682) and (fileheader[0] != 0x377f0683):
-        	print 'invalid file format'
-        	return 1
+            print 'invalid file format'
+            return 1
         self.pagesize = fileheader[2]
         #print '[+] PageSize: %x'%self.pagesize 
         #print '[+] Checkpoint Sequence Number: %d'%fileheader[3]
         return struct.unpack(FILE_HEADER, self.fbuf[0:FILE_HEADER_SIZE])
 
     def get_frame_list(self):
-    	frame_list = []
-    	frame_buf = self.fbuf[FILE_HEADER_SIZE:]
+        frame_list = []
+        frame_buf = self.fbuf[FILE_HEADER_SIZE:]
         #print 'frame size: %x'%len(self.fbuf)
         count = 1
-    	for offset in range(0, len(frame_buf), self.pagesize+FRAME_HEADER_SIZE):
+        for offset in range(0, len(frame_buf), self.pagesize+FRAME_HEADER_SIZE):
             #print '[+] frame %d, offset : %x'%(count, offset+FILE_HEADER_SIZE)
             frame_element = []
             frameheader = struct.unpack(FRAME_HEADER, frame_buf[offset:offset+FRAME_HEADER_SIZE])
             #print ' [-] Frame Number : %d, endoftransaction: %d'%(frameheader[0], frameheader[1])
             #print ' [-] Sequence Number : %d'%frameheader[2]
             #print ' [-] Sequence Number : %d'%frameheader[3]
-            frame_element.append(frameheader) # frame header
+            frame_element.append(frameheader) #frame header
             frame_element.append(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize]) # page
             frame_list.append(frame_element)
             #print ' [-] frame size : %x'%len(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize])
@@ -131,37 +132,9 @@ class WAL_SQLITE():
         self.count = count
         return frame_list
 
-    def write_sqlitedb_file(self, frame_list, outputfile):
-        try:
-            file_handler = open(outputfile, 'wba')
-        except:
-            print 'outputfile open failed'
-            return 1
-
-        for count in range(1, self.count):
-            frame_temp = []
-            for frame in frame_list:
-                if frame[0][0] == count:
-                    if len(frame_temp) == 0:
-                        frame_temp.append(frame[0])
-                        frame_temp.append(frame[1])
-                    else: # transaction number
-                        if frame_temp[0][1] < frame[0][1]:
-                            frame_temp.pop()
-                            frame_temp.pop()
-                            frame_temp.append(frame[0])
-                            frame_temp.append(frame[1])
-
-            if len(frame_temp) == 0:
-                file_handler.write('\x00'*0x1000)
-            else:
-                print 'find frame %d, transaction number: %d'%(count, frame_temp[0][1])
-                file_handler.write(frame_temp[1])
-                    
-
-        file_handler.close()
-
     def write_csv_file(self, dataset, outputfile):
+        if (len(dataset[0]) is 0) or (len(dataset[1]) is 0):
+            return
         try:
             file_handler = open(outputfile, 'a')
         except:
@@ -170,21 +143,23 @@ class WAL_SQLITE():
 
         for count in range(0, len(dataset[0])):
             file_handler.write(dataset[0][count])
-            file_handler.write('\t')
-        file_handler.write('\n')
+            file_handler.write(u'\t')
+        file_handler.write(u'\n')
         for count in range(0, len(dataset[1])):
+            if dataset[1][count] == 0:
+                continue
             if dataset[0][count] == 'blob':
-                file_handler.write('')
+                file_handler.write(u'')
             elif dataset[0][count] == 'text':
                 try:
-                    file_handler.write(str(dataset[1][count]).decode('utf-8'))
+                    file_handler.write(unicode(str(dataset[1][count]).decode('utf-8')))
                 except UnicodeEncodeError:
                     file_handler.write(str(dataset[1][count]))
             else:
                 #print dataset[1][count]
                 file_handler.write(str(dataset[1][count]))
-            file_handler.write('\t')
-        file_handler.write('\n')
+            file_handler.write(u'\t')
+        file_handler.write(u'\n')
         file_handler.close()
 
 
@@ -192,7 +167,6 @@ def usage():
     print 'python wal_parser.py [-i SQLITE WAL FILE] [-o OUTPUT FILE]'
 
 def main():
-    
     inputfile = ''
     outputfile = ''
     
@@ -246,7 +220,7 @@ def main():
                 #print dataset[0]
                 #print dataset[1]
 
-                wal_class.write_csv_file(dataset, outputfile)
+                wal_class.write_csv_file((dataset, outputfile)
 
 if __name__ == "__main__":
     main()
