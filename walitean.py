@@ -19,8 +19,9 @@
 import getopt
 from sys import argv, exit, stdout, stdin, stderr
 import struct
-import time
+#import time
 import sqlitePage
+import sqliteDB
 import sqlite3
 
 #struct Write Ahead Log file header {
@@ -143,45 +144,129 @@ class WAL_SQLITE():
 
         for count in range(0, len(dataset[0])):
             file_handler.write(dataset[0][count])
-            file_handler.write(u'\t')
-        file_handler.write(u'\n')
+            file_handler.write('\t')
+        file_handler.write('\n')
         for count in range(0, len(dataset[1])):
             if dataset[1][count] == 0:
                 continue
             if dataset[0][count] == 'blob':
-                file_handler.write(u'')
+                #file_handler.write(buffer(dataset[1][count]))
+                file_handler.write('')
             elif dataset[0][count] == 'text':
                 try:
-                    file_handler.write(unicode(str(dataset[1][count]).decode('utf-8')))
+                    file_handler.write(str(dataset[1][count]).decode('utf8').replace('\n', ' ').encode('utf8'))
                 except UnicodeEncodeError:
-                    file_handler.write(str(dataset[1][count]))
+                    file_handler.write(str(dataset[1][count]).replace('\n', ''))
             else:
                 #print dataset[1][count]
                 file_handler.write(str(dataset[1][count]))
-            file_handler.write(u'\t')
-        file_handler.write(u'\n')
+            file_handler.write('\t')
+        file_handler.write('\n')
         file_handler.close()
 
+    def createdb(self, dbname):
+        tblset = []
+        db = sqliteDB.SQLITE(dbname)
+        tbllist = db.getDBTableList()
+        for tblname in tbllist:
+            dbdata = []
+
+            columnlist = db.getDBTblInfoList(tblname)
+            #print columnlist
+            dbdata.append(tblname)
+            dbdata.append(columnlist)
+            tblset.append(dbdata)
+
+        con = sqlite3.connect('%s-wal.db'%dbname)
+        cursor = con.cursor()
+
+        for tbl in tblset:
+            query = u"CREATE TABLE "+tbl[0][0]+u"("
+            count = len(tbl[1])
+            for column in tbl[1]:
+                count -= 1
+                query += column[1]
+                query += u" "
+                query += column[2]
+                if count != 0:
+                    query += u", "
+            query += u");"
+            print query
+            try:
+                cursor.execute(query)
+            except sqlite3.OperationalError, e:
+                print e
+        con.close()
+        return tblset
+
+    def write_sqlite_file(self, tblset, dataset, dbname):
+        if len(dataset[0]) == 0:
+            return
+
+        con = sqlite3.connect('%s-wal.db'%dbname)
+        cursor = con.cursor()
+
+        #print dataset[0]
+        # comparing two column list
+        percentagelst = []
+        for tbl in tblset:
+            temp_list = []
+            for column in tbl[1]: # matching list type
+                temp_list.append(column[2])
+            percentagelst.append(comp(temp_list, dataset[0]))
+
+        m = max(percentagelst)
+        result_lst = [i for i, j in enumerate(percentagelst) if j == m]
+        #print tblset[result_lst[0]]
+        query = u"INSERT INTO "+tblset[result_lst[0]][0][0]+u" VALUES ("
+        count = len(tblset[result_lst[0]][1])
+        for record in dataset[1]:
+            #print record
+            count -= 1
+            try:
+                query += str(record)
+            except UnicodeDecodeError, e:
+                print record
+                query += record.decode('utf-8')
+            #except TypeError, e:
+            #    query += buffer(record)
+            if count != 0:
+                query += u", "
+        query += u");"
+        print query
+        try:
+            cursor.execute(query)
+        except sqlite3.OperationalError, e:
+            print e
+
+        con.commit()
+        con.close()
+
+
+def comp(dbtbl, waltbl):
+    tblcolumnlen = len(dbtbl)
+    result = set(dbtbl) & set(waltbl)
+    return ((len(result)/tblcolumnlen) * 100)
 
 def usage():
-    print 'python wal_parser.py [-i SQLITE WAL FILE] [-o OUTPUT FILE]'
+    print 'python wal_parser.py [-i SQLITE WAL FILE] [-d SQLITE FILE]'
 
 def main():
     inputfile = ''
     outputfile = ''
     
     try:
-        option, args = getopt.getopt(argv[1:], 'i:o:')
+        option, args = getopt.getopt(argv[1:], 'i:d:')
 
     except getopt.GetoptError, err:
-        usage(argv)
+        usage()
         exit()
     
     #print option
     for op, p, in option:
         if op in '-i':
             inputfile = p
-        elif op in '-o':
+        elif op in '-d':
             outputfile = p
         else:
             print 'invalid option'
@@ -204,6 +289,8 @@ def main():
 
     table_list = {} # dictionary
 
+    #tblset = wal_class.createdb(outputfile) # return table information
+
     for frame in frame_list:
         sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
         if(sqlite_page.isleaf()):
@@ -217,10 +304,11 @@ def main():
                 dataset = sqlite_page.getCellData(cellbuf)
 
                 #table_list[dataset[0]] = dataset[1]
-                #print dataset[0]
-                #print dataset[1]
+                #print dataset[0] #column name
+                #print dataset[1] #data
 
-                wal_class.write_csv_file((dataset, outputfile)
+                wal_class.write_csv_file(dataset, outputfile)
+                #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
 
 if __name__ == "__main__":
     main()
