@@ -17,9 +17,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import getopt
-from sys import argv, exit, stdout, stdin, stderr
+from sys import argv, exit
 import struct
-#import time
 import sqlitePage
 import sqliteDB
 import sqlite3
@@ -249,7 +248,7 @@ def comp(dbtbl, waltbl):
     return ((len(result)/tblcolumnlen) * 100)
 
 def usage():
-    print 'python wal_parser.py [-i SQLITE WAL FILE] [-d SQLITE FILE]'
+    print 'python wal_parser.py [-i SQLITE WAL FILE] [-d OUTPUTFILE<TSV>]'
 
 def main():
     inputfile = ''
@@ -284,28 +283,24 @@ def main():
     
     wal_class = WAL_SQLITE()
     wal_class.open(inputfile)
-    header = wal_class.get_header()
-    frame_list = wal_class.get_frame_list()
+    header = wal_class.get_header()     # get wal header
+    frame_list = wal_class.get_frame_list()     # get a list of wal frame
 
-    table_list = {} # dictionary
+    table_list = {}     # dictionary
 
     #tblset = wal_class.createdb(outputfile) # return table information
 
     for frame in frame_list:
         sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
-        if(sqlite_page.isleaf()):
+        if sqlite_page.isleaf() == 1:   # If it is leaf page
             #print 'leaf node : frame %i'%frame[0][0]
             #hexdump(frame[1])
-            celllst = sqlite_page.getcelloffset()
+            celllst = sqlite_page.getcelloffset()   # Getting a list of cell offset
 
             for celloffset in celllst:
                 #print 'cell'
                 cellbuf = frame[1][celloffset:]
-                dataset = sqlite_page.getCellData(cellbuf)
-
-                #table_list[dataset[0]] = dataset[1]
-                #print dataset[0] #column name
-                #print dataset[1] #data
+                dataset = sqlite_page.getCellData(cellbuf)  # Getting a Cell Data(column type, data)
 
                 wal_class.write_csv_file(dataset, outputfile)
                 #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
