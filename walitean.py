@@ -22,6 +22,8 @@ import struct
 import sqlitePage
 import sqliteDB
 import sqlite3
+from collections import defaultdict
+from tableprint import columnprint
 
 #struct Write Ahead Log file header {
 # uint signature; // 0x377f0682 or 0x377f0683
@@ -46,35 +48,6 @@ FILE_HEADER_SIZE = 32
 # }
 FRAME_HEADER = '>IIIIII'
 FRAME_HEADER_SIZE = 24
-
-# SOURCE: http://mwultong.blogspot.com/2007/04/python-hex-viewer-file-dumper.html
-def hexdump(buf):
-    offset = 0
-    while offset < len(buf):
-        buf16 = buf[offset:offset+16]
-        buf16Len = len(buf16)
-        if buf16Len == 0: break
-        output = "%08X:  " % (offset)
-        
-        for i in range(buf16Len):
-            if (i == 8): output += " "
-            output += "%02X " % (ord(buf16[i]))
-        
-        for i in range( ((16 - buf16Len) * 3) + 1 ):
-            output += " "
-            if (buf16Len < 9):
-                output += " "
-        
-        for i in range(buf16Len):
-            if (ord(buf16[i]) >= 0x20 and ord(buf16[i]) <= 0x7E):
-                output += buf16[i]
-            else: output += "."
-        
-        offset += 16
-        print output
-        
-    if offset == 0:
-        print "%08X:  " %offset
 
 class WAL_SQLITE():
     def __init__(self):
@@ -132,36 +105,43 @@ class WAL_SQLITE():
         self.count = count
         return frame_list
 
-    def write_csv_file(self, dataset, outputfile):
-        if (len(dataset[0]) is 0) or (len(dataset[1]) is 0):
-            return
+
+    def write_tsv_file(self, dic, outputfile):
+
         try:
             file_handler = open(outputfile, 'a')
+
         except:
             print 'outputfile open failed'
             return 1
 
-        for count in range(0, len(dataset[0])):
-            file_handler.write(dataset[0][count])
-            file_handler.write('\t')
-        file_handler.write('\n')
-        for count in range(0, len(dataset[1])):
-            if dataset[1][count] == 0:
-                continue
-            if dataset[0][count] == 'blob':
-                #file_handler.write(buffer(dataset[1][count]))
-                file_handler.write('')
-            elif dataset[0][count] == 'text':
-                try:
-                    file_handler.write(str(dataset[1][count]).decode('utf8').replace('\n', ' ').encode('utf8'))
-                except UnicodeEncodeError:
-                    file_handler.write(str(dataset[1][count]).replace('\n', ''))
-            else:
-                #print dataset[1][count]
-                file_handler.write(str(dataset[1][count]))
-            file_handler.write('\t')
-        file_handler.write('\n')
+        for k, v in dic.iteritems():
+            DecColumn = DecodeColumn(k)
+            for colvalue in DecColumn:
+                file_handler.write(colvalue)
+                file_handler.write('\t')
+            file_handler.write('\n')
+
+            for row in v:
+                for l in range(0, len(DecColumn)):
+                    if DecColumn[l] == 'blob':
+                        file_handler.write('')
+                    elif DecColumn[l] == 'text':
+                        bufstr = ''
+                        try:
+                            bufstr = str(row[l]).decode('utf8').replace('\n', ' ').replace('\t', ' ').encode('utf8')
+                        except UnicodeEncodeError:
+                            bufstr = str(row[l]).replace('\n', ' ').replace('\t', ' ')
+
+                        file_handler.write(bufstr)
+                    else:
+                        file_handler.write(str(row[l]))
+
+                    file_handler.write('\t')
+                file_handler.write('\n')
+            file_handler.write('\n')
         file_handler.close()
+
 
     def createdb(self, dbname):
         tblset = []
@@ -241,21 +221,103 @@ class WAL_SQLITE():
         con.commit()
         con.close()
 
+    # dictionary
+    def print_table(self, dic):
+
+        for k, v in dic.iteritems():
+            decColumn = []
+            mszlist = []    # optional max size list
+
+            decColumn = DecodeColumn(k)
+            max_len = len(decColumn)
+            offsetlst = []
+
+            #print decColumn
+
+            count = 0
+            # add column type
+            for coltype in decColumn:
+                if coltype == 'blob':   # for remove blob data on stdout
+                    offsetlst.append(count) # add column number on offsetlst
+                mszlist.append(-1)
+                count += 1
+
+            #print decColumn
+            contentlist = []
+            for row in v:
+                line = []
+                for l in range(0, max_len):
+                    if decColumn[l] == 'int':
+                        try:
+                            line.append('%d'%row[l])
+                        except TypeError:
+                            line.append('%s'%row[l])
+                    elif decColumn[l] == 'float':
+                        line.append('%f'%row[l])
+                    elif decColumn[l] == 'text':
+                        sqlitetext = ''
+                        try:
+                            sqlitetext = str(row[l]).decode('utf8').replace('\n', ' ').encode('utf8')
+                        except:
+                            sqlitetext = str(row[l]).replace('\n', '')
+                        line.append('%s'%sqlitetext)
+                    else:   # blob
+                        line.append('')
+
+                contentlist.append(line)
+                #print row
+
+            columnprint(decColumn, contentlist, mszlist)
+            print ''
+
+
 
 def comp(dbtbl, waltbl):
     tblcolumnlen = len(dbtbl)
     result = set(dbtbl) & set(waltbl)
     return ((len(result)/tblcolumnlen) * 100)
 
+
+def EncodeColumn(dataset):
+
+    column_hash = ''
+    for type in dataset[0]:
+        column_hash += type[0] # if type[0] is 'i', type is 'int'
+
+    record = []
+    record.append(column_hash)
+    record.append(dataset[1])
+    return record
+
+
+def DecodeColumn(dataset):
+    column = []
+    column_hash = dataset
+
+    for type in column_hash:
+        if type == 'i':
+            column.append('int')
+        elif type == 'float':
+            column.append('float')
+        elif type == 'b':
+            column.append('blob')
+        elif type == 't':
+            column.append('text')
+
+    return column
+
+
 def usage():
-    print 'python wal_parser.py [-i SQLITE WAL FILE] [-d OUTPUTFILE<TSV>]'
+    print 'Copyright by n0fate (n0fate@n0fate.com)'
+    print 'python walitean.py [-i SQLITE WAL FILE] [-f TYPE(raw, tsv)] [-o FILENAME(if type is tsv)]'
 
 def main():
     inputfile = ''
     outputfile = ''
+    outputtype = ''     # file type
     
     try:
-        option, args = getopt.getopt(argv[1:], 'i:d:')
+        option, args = getopt.getopt(argv[1:], 'i:o:f:')
 
     except getopt.GetoptError, err:
         usage()
@@ -265,14 +327,20 @@ def main():
     for op, p, in option:
         if op in '-i':
             inputfile = p
-        elif op in '-d':
+        elif op in '-o':
             outputfile = p
+        elif op in '-f':
+            outputtype = p
         else:
             print 'invalid option'
             exit()
     
     try:
-        if inputfile == '' or (outputfile == ''):
+        if (inputfile == '') or (outputtype == ''):
+            usage()
+            exit()
+
+        elif outputtype == 'tsv' and outputfile == '':
             usage()
             exit()
     
@@ -286,7 +354,10 @@ def main():
     header = wal_class.get_header()     # get wal header
     frame_list = wal_class.get_frame_list()     # get a list of wal frame
 
-    table_list = {}     # dictionary
+    # ref : http://stackoverflow.com/questions/5378231/python-list-to-dictionary-multiple-values-per-key
+    d1 = defaultdict(list)
+
+    total_list = []
 
     #tblset = wal_class.createdb(outputfile) # return table information
 
@@ -302,8 +373,27 @@ def main():
                 cellbuf = frame[1][celloffset:]
                 dataset = sqlite_page.getCellData(cellbuf)  # Getting a Cell Data(column type, data)
 
-                wal_class.write_csv_file(dataset, outputfile)
+                if len(dataset) == 0:
+                    continue
+
+                record = EncodeColumn(dataset)
+
+                total_list.append(record)
+
                 #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
+
+    for k, v in total_list:
+        d1[k].append(v)
+
+    d = dict((k, tuple(v)) for k, v in d1.iteritems())
+
+    if outputtype == 'raw':
+        print '[+] Output Type : Standard Output(Terminal)'
+        wal_class.print_table(d)
+    elif outputtype == 'tsv':
+        print '[+] Output Type : TSV(Tab Separated Values)'
+        print '[+] File Name : %s'%outputfile
+        wal_class.write_tsv_file(d, outputfile)
 
 if __name__ == "__main__":
     main()
