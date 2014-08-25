@@ -134,8 +134,12 @@ class SQLITE_PAGE():
         data = celldata[offset:offset + size]
 
         if type == 'int':
-            if size >= 6:
-                return struct.unpack('=q', data)[0]  # signed int (6 or 8 bytes)
+            if size == 6:
+                return struct.unpack('=q', data+'\x00\x00')[0]  # signed int (6 or 8 bytes)
+            elif size == 7:
+                return struct.unpack('=q', data+'\x00')[0]
+            elif size == 8:
+                return struct.unpack('=q', data)[0]
             elif size == 1:
                 return struct.unpack('=b', data)[0]  # signed int (1 bytes)
             elif size == 2:

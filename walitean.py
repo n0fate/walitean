@@ -22,6 +22,7 @@ import struct
 import sqlitePage
 import sqliteDB
 import sqlite3
+from operator import eq
 from collections import defaultdict
 from tableprint import columnprint
 
@@ -119,7 +120,7 @@ class WAL_SQLITE():
             DecColumn = DecodeColumn(k)
             for colvalue in DecColumn:
                 file_handler.write(colvalue)
-                file_handler.write('\t')
+                file_handler.write(',')
             file_handler.write('\n')
 
             for row in v:
@@ -129,15 +130,15 @@ class WAL_SQLITE():
                     elif DecColumn[l] == 'text':
                         bufstr = ''
                         try:
-                            bufstr = str(row[l]).decode('utf8').replace('\n', ' ').replace('\t', ' ').encode('utf8')
+                            bufstr = str(row[l]).decode('utf8').replace('\n', ' ').replace(',', ' ').encode('utf8')
                         except UnicodeEncodeError:
-                            bufstr = str(row[l]).replace('\n', ' ').replace('\t', ' ')
+                            bufstr = str(row[l]).replace('\n', ' ').replace(',', ' ')
 
                         file_handler.write(bufstr)
                     else:
                         file_handler.write(str(row[l]))
 
-                    file_handler.write('\t')
+                    file_handler.write(',')
                 file_handler.write('\n')
             file_handler.write('\n')
         file_handler.close()
@@ -309,7 +310,7 @@ def DecodeColumn(dataset):
 
 def usage():
     print 'Copyright by n0fate (n0fate@n0fate.com)'
-    print 'python walitean.py [-i SQLITE WAL FILE] [-f TYPE(raw, tsv)] [-o FILENAME(if type is tsv)]'
+    print 'python walitean.py [-i SQLITE WAL FILE] [-f TYPE(raw, csv)] [-o FILENAME(if type is csv)]'
 
 def main():
     inputfile = ''
@@ -340,7 +341,7 @@ def main():
             usage()
             exit()
 
-        elif outputtype == 'tsv' and outputfile == '':
+        elif outputtype == 'csv' and outputfile == '':
             usage()
             exit()
     
@@ -378,7 +379,14 @@ def main():
 
                 record = EncodeColumn(dataset)
 
-                total_list.append(record)
+                findit = 0
+                for prev_column, prev_record in total_list:
+                    if all(map(eq, prev_record, record[1])):
+                        findit = 1
+                        break
+
+                if findit == 0:
+                    total_list.append(record)
 
                 #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
 
@@ -390,8 +398,8 @@ def main():
     if outputtype == 'raw':
         print '[+] Output Type : Standard Output(Terminal)'
         wal_class.print_table(d)
-    elif outputtype == 'tsv':
-        print '[+] Output Type : TSV(Tab Separated Values)'
+    elif outputtype == 'csv':
+        print '[+] Output Type : CSV(Comma Separated Values)'
         print '[+] File Name : %s'%outputfile
         wal_class.write_tsv_file(d, outputfile)
 
