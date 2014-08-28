@@ -80,6 +80,7 @@ class WaliteanUI(QtGui.QWidget):
         self.QTableList.setFixedWidth(150)
 
         self.connect(self.QTableList, QtCore.SIGNAL('itemClicked(QListWidgetItem *)'), self.showRecords)
+        self.connect(self.QTableList, QtCore.SIGNAL('itemSelectionChanged()'), self.showRecordskb)
 
 
         bottomLayout = QtGui.QHBoxLayout()
@@ -118,6 +119,9 @@ class WaliteanUI(QtGui.QWidget):
         framelist = self.walite.get_frame_list()
         self.d = self.walite.process(framelist)
 
+        self.framecount = framelist.__len__()
+        self.pagesize = self.walite.pagesize
+
         if(self.d.__len__() == 0):
             QtGui.QMessageBox('Error!', 'WAL Parsing Failed!')
         else:
@@ -134,20 +138,23 @@ class WaliteanUI(QtGui.QWidget):
             item = QtGui.QListWidgetItem("Table %s"%key)
             self.QTableList.addItem(item)
 
+    def showRecordskb(self):    # keyboard interrupt handler
+        #print self.QTableList.selectedItems()
+        self.showRecords(self.QTableList.currentItem())
 
 
     def showRecords(self, item):
         self.recordtable.clear()
-        print 'Table Name is : %s'%str(item.text())
+        #print 'Table Name is : %s'%str(item.text())
         encodedcolumn = str(item.text()).split(' ')[1]
         records = self.d[encodedcolumn]
-        print records
+        #print records
         #print records.__len__()
 
         # show column list
         columnlist = walitean.DecodeColumn(encodedcolumn)
 
-        print columnlist
+        #print columnlist
 
         self.recordtable.setRowCount(len(records))
         #print len(records)
@@ -160,15 +167,21 @@ class WaliteanUI(QtGui.QWidget):
         for record in records:
             colnum = 0
             for value in record:
-                self.recordtable.setItem(rownum, colnum, QtGui.QTableWidgetItem(QtCore.QString("%1").arg(value)))
+                if columnlist[colnum] == 'text':
+                    try:
+                        #print value
+                        self.recordtable.setItem(rownum, colnum, QtGui.QTableWidgetItem(QtCore.QString("%1").arg(value.decode('utf8').replace('\n', ' '))))
+                    except UnicodeEncodeError:
+                        self.recordtable.setItem(rownum, colnum, QtGui.QTableWidgetItem(QtCore.QString("%1").arg(value.replace('\n', ' '))))
+                elif columnlist[colnum] == 'int':
+                    try:
+                        self.recordtable.setItem(rownum, colnum, QtGui.QTableWidgetItem(QtCore.QString("%1").arg(int(value))))
+                    except TypeError: # None Type
+                        self.recordtable.setItem(rownum, colnum, QtGui.QTableWidgetItem(QtCore.QString("%1").arg('None')))
+                else:
+                    self.recordtable.setItem(rownum, colnum, QtGui.QTableWidgetItem(QtCore.QString("%1").arg(value)))
                 colnum += 1
             rownum += 1
-
-
-
-
-
-
 
     #def showfileinfo(self):
         # showing wal file information
