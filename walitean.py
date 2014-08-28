@@ -65,6 +65,7 @@ class WAL_SQLITE():
             print 'invalid input file'
             return 1
         self.fbuf = self.fhandle.read()
+        self.get_header()
         return self.fbuf
 
     ## get WAL File Header
@@ -79,6 +80,7 @@ class WAL_SQLITE():
             print 'invalid file format'
             return 1
         self.pagesize = fileheader[2]
+        self.cpseqnum = fileheader[3]
         #print '[+] PageSize: %x'%self.pagesize 
         #print '[+] Checkpoint Sequence Number: %d'%fileheader[3]
         return struct.unpack(FILE_HEADER, self.fbuf[0:FILE_HEADER_SIZE])
@@ -106,6 +108,47 @@ class WAL_SQLITE():
         self.count = count
         return frame_list
 
+    def process(self, framelist):
+        # ref : http://stackoverflow.com/questions/5378231/python-list-to-dictionary-multiple-values-per-key
+        d1 = defaultdict(list)
+
+        total_list = []
+
+        #tblset = wal_class.createdb(outputfile) # return table information
+
+        for frame in framelist:
+            sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
+            if sqlite_page.isleaf() == 1:   # If it is leaf page
+                #print 'leaf node : frame %i'%frame[0][0]
+                #hexdump(frame[1])
+                celllst = sqlite_page.getcelloffset()   # Getting a list of cell offset
+
+                for celloffset in celllst:
+                    #print 'cell'
+                    cellbuf = frame[1][celloffset:]
+                    dataset = sqlite_page.getCellData(cellbuf)  # Getting a Cell Data(column type, data)
+
+                    if len(dataset) == 0:
+                        continue
+
+                    record = EncodeColumn(dataset)
+
+                    findit = 0
+                    for prev_column, prev_record in total_list:
+                        if all(map(eq, prev_record, record[1])):
+                            findit = 1
+                            break
+
+                    if findit == 0:
+                        total_list.append(record)
+
+                    #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
+
+        for k, v in total_list:
+            d1[k].append(v)
+
+        d = dict((k, tuple(v)) for k, v in d1.iteritems())
+        return d
 
     def write_tsv_file(self, dic, outputfile):
 
@@ -298,7 +341,7 @@ def DecodeColumn(dataset):
     for type in column_hash:
         if type == 'i':
             column.append('int')
-        elif type == 'float':
+        elif type == 'f':
             column.append('float')
         elif type == 'b':
             column.append('blob')
@@ -352,48 +395,8 @@ def main():
     
     wal_class = WAL_SQLITE()
     wal_class.open(inputfile)
-    header = wal_class.get_header()     # get wal header
     frame_list = wal_class.get_frame_list()     # get a list of wal frame
-
-    # ref : http://stackoverflow.com/questions/5378231/python-list-to-dictionary-multiple-values-per-key
-    d1 = defaultdict(list)
-
-    total_list = []
-
-    #tblset = wal_class.createdb(outputfile) # return table information
-
-    for frame in frame_list:
-        sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
-        if sqlite_page.isleaf() == 1:   # If it is leaf page
-            #print 'leaf node : frame %i'%frame[0][0]
-            #hexdump(frame[1])
-            celllst = sqlite_page.getcelloffset()   # Getting a list of cell offset
-
-            for celloffset in celllst:
-                #print 'cell'
-                cellbuf = frame[1][celloffset:]
-                dataset = sqlite_page.getCellData(cellbuf)  # Getting a Cell Data(column type, data)
-
-                if len(dataset) == 0:
-                    continue
-
-                record = EncodeColumn(dataset)
-
-                findit = 0
-                for prev_column, prev_record in total_list:
-                    if all(map(eq, prev_record, record[1])):
-                        findit = 1
-                        break
-
-                if findit == 0:
-                    total_list.append(record)
-
-                #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
-
-    for k, v in total_list:
-        d1[k].append(v)
-
-    d = dict((k, tuple(v)) for k, v in d1.iteritems())
+    d = wal_class.process(frame_list)
 
     if outputtype == 'raw':
         print '[+] Output Type : Standard Output(Terminal)'
