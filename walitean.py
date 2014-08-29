@@ -114,8 +114,6 @@ class WAL_SQLITE():
 
         total_list = []
 
-        #tblset = wal_class.createdb(outputfile) # return table information
-
         for frame in framelist:
             sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
             if sqlite_page.isleaf() == 1:   # If it is leaf page
@@ -141,8 +139,6 @@ class WAL_SQLITE():
 
                     if findit == 0:
                         total_list.append(record)
-
-                    #wal_class.write_sqlite_file(tblset, dataset, outputfile) # need to time ;-/
 
         for k, v in total_list:
             d1[k].append(v)

@@ -50,7 +50,7 @@ class WaliteanUI(QtGui.QWidget):
         #QOpenBtn.move(600, 50)
         #QAnBtn.move(600, 100)
 
-        self.setGeometry(300, 300, 800, 400)
+        self.setGeometry(300, 300, 800, 600)
         self.move(300, 300)
         self.setWindowTitle('walitean - WAL Analyzer for SQLite by n0fate')
 
@@ -83,7 +83,7 @@ class WaliteanUI(QtGui.QWidget):
         self.connect(self.QTableList, QtCore.SIGNAL('itemSelectionChanged()'), self.showRecordskb)
 
 
-        bottomLayout = QtGui.QHBoxLayout()
+        middleLayout = QtGui.QHBoxLayout()
         leftLayout = QtGui.QVBoxLayout()
 
         leftLayout.addWidget(tablelabel)
@@ -95,14 +95,25 @@ class WaliteanUI(QtGui.QWidget):
         recordlabel = QtGui.QLabel('Records')
         self.recordtable = QtGui.QTableWidget()
 
+        #self.connect(self.recordtable, QtCore.SIGNAL('itemClicked(QListWidgetItem *)'), self.recorddump)
+        #self.connect(self.recordtable, QtCore.SIGNAL('itemSelectionChanged()'), self.recorddumpkb)
+        self.connect(self.recordtable, QtCore.SIGNAL('currentCellChanged(int,int,int,int)'), self.recorddump)
+
         rightLayout.addWidget(recordlabel)
         rightLayout.addWidget(self.recordtable)
 
-        bottomLayout.addLayout(leftLayout)
-        bottomLayout.addSpacing(3)
-        bottomLayout.addLayout(rightLayout)
+        middleLayout.addLayout(leftLayout)
+        middleLayout.addSpacing(3)
+        middleLayout.addLayout(rightLayout)
+
+        bottomLayout = QtGui.QHBoxLayout()
+
+        self.hexdump = QtGui.QTextBrowser()
+
+        bottomLayout.addWidget(self.hexdump)
 
         mainLayout.addLayout(topLayout)
+        mainLayout.addLayout(middleLayout)
         mainLayout.addLayout(bottomLayout)
 
         self.setLayout(mainLayout)
@@ -114,6 +125,12 @@ class WaliteanUI(QtGui.QWidget):
 
 
     def process(self):
+
+        # Clean-Up
+        self.QTableList.clear()
+        self.recordtable.clear()
+        self.hexdump.clear()
+
         self.walite = walitean.WAL_SQLITE()
         self.walite.open(self.filename)
         framelist = self.walite.get_frame_list()
@@ -131,6 +148,7 @@ class WaliteanUI(QtGui.QWidget):
 
 
     def showtablelist(self):
+        self.QTableList.clear()
         tablenum = self.d.__len__()
         #print tablenum
 
@@ -148,8 +166,8 @@ class WaliteanUI(QtGui.QWidget):
         #print 'Table Name is : %s'%str(item.text())
         encodedcolumn = str(item.text()).split(' ')[1]
         records = self.d[encodedcolumn]
-        #print records
-        #print records.__len__()
+
+        self.tablename = encodedcolumn # save tablename for hexdump
 
         # show column list
         columnlist = walitean.DecodeColumn(encodedcolumn)
@@ -183,9 +201,50 @@ class WaliteanUI(QtGui.QWidget):
                 colnum += 1
             rownum += 1
 
+    # testing pharse
+    def recorddump(self, curRow, curCol, preRow, preCol):
+        if (curRow == preRow) and (curCol == preCol):
+            return
+
+        self.hexdump.clear()
+
+        records = self.d[self.tablename]
+
+        data = records[curRow][curCol]
+        output = hexdump(data)
+        self.hexdump.setText(output)
+
     #def showfileinfo(self):
         # showing wal file information
 
+# SOURCE: http://mwultong.blogspot.com/2007/04/python-hex-viewer-file-dumper.html
+def hexdump(buf):
+    offset = 0
+    output = ''
+    while offset < len(buf):
+        buf16 = buf[offset:offset + 16]
+        buf16Len = len(buf16)
+        if buf16Len == 0: break
+        output += "%08X:  " % (offset)
+
+        for i in range(buf16Len):
+            if (i == 8): output += " "
+            output += "%02X " % (ord(buf16[i]))
+
+        for i in range(((16 - buf16Len) * 3) + 1):
+            output += " "
+            if (buf16Len < 9):
+                output += " "
+
+        for i in range(buf16Len):
+            if (ord(buf16[i]) >= 0x20 and ord(buf16[i]) <= 0x7E):
+                output += buf16[i]
+            else:
+                output += "."
+
+        offset += 16
+        output += '\r'
+    return output
 
 
 def main():
