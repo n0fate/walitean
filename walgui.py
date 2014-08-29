@@ -42,11 +42,7 @@ class WaliteanUI(QtGui.QWidget):
         QOpenBtn = QtGui.QPushButton('Open')
         self.connect(QOpenBtn, QtCore.SIGNAL('clicked()'), self.openfile)
 
-        QAnBtn = QtGui.QPushButton('Analysis', self)
-        self.connect(QAnBtn, QtCore.SIGNAL('clicked()'), self.process)
-
         self.Qfilepath = QtGui.QLineEdit()
-        self.QProgressbar = QtGui.QProgressBar()
         #QOpenBtn.move(600, 50)
         #QAnBtn.move(600, 100)
 
@@ -59,8 +55,6 @@ class WaliteanUI(QtGui.QWidget):
         topLayout = QtGui.QHBoxLayout()
         topLayout.addWidget(QOpenBtn)
         topLayout.addWidget(self.Qfilepath)
-        topLayout.addWidget(QAnBtn)
-        topLayout.addWidget(self.QProgressbar)
 
         tablelabel = QtGui.QLabel('Table List')
         tablelabel.setFixedWidth(150)
@@ -107,10 +101,31 @@ class WaliteanUI(QtGui.QWidget):
         middleLayout.addLayout(rightLayout)
 
         bottomLayout = QtGui.QHBoxLayout()
+        btleftLayout = QtGui.QVBoxLayout()
+        btrightLayout = QtGui.QVBoxLayout()
+
+
+        Qcheckheader = QtGui.QCheckBox('tbl/col analysis')
+
+        Qcheckheader.setFixedWidth(150)
+
+        QAnBtn = QtGui.QPushButton('Analysis', self)
+        QAnBtn.setFixedWidth(150)
+        self.connect(QAnBtn, QtCore.SIGNAL('clicked()'), self.process)
+        self.QProgressbar = QtGui.QProgressBar()
+        self.QProgressbar.setFixedWidth(150)
+
+        btleftLayout.addWidget(Qcheckheader)
+        btleftLayout.addWidget(QAnBtn)
+        btleftLayout.addWidget(self.QProgressbar)
 
         self.hexdump = QtGui.QTextBrowser()
+        hexdumplabel = QtGui.QLabel('Hex Dump')
+        btrightLayout.addWidget(hexdumplabel)
+        btrightLayout.addWidget(self.hexdump)
 
-        bottomLayout.addWidget(self.hexdump)
+        bottomLayout.addLayout(btleftLayout)
+        bottomLayout.addLayout(btrightLayout)
 
         mainLayout.addLayout(topLayout)
         mainLayout.addLayout(middleLayout)
