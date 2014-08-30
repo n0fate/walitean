@@ -35,6 +35,7 @@ class RecordModel(QtCore.QAbstractTableModel):
 class WaliteanUI(QtGui.QWidget):
     def __init__(self):
         super(WaliteanUI, self).__init__()
+        self.filename = ''
         self.initUI()   # init
 
     def initUI(self):
@@ -56,8 +57,8 @@ class WaliteanUI(QtGui.QWidget):
         topLayout.addWidget(QOpenBtn)
         topLayout.addWidget(self.Qfilepath)
 
-        tablelabel = QtGui.QLabel('Table List')
-        tablelabel.setFixedWidth(150)
+        self.tablelabel = QtGui.QLabel('Table List')
+        self.tablelabel.setFixedWidth(150)
         wallabel = QtGui.QLabel('File Info')
         wallabel.setFixedWidth(150)
         walinfo = QtGui.QTableView()
@@ -80,20 +81,20 @@ class WaliteanUI(QtGui.QWidget):
         middleLayout = QtGui.QHBoxLayout()
         leftLayout = QtGui.QVBoxLayout()
 
-        leftLayout.addWidget(tablelabel)
+        leftLayout.addWidget(self.tablelabel)
         leftLayout.addWidget(self.QTableList)
         leftLayout.addWidget(wallabel)
         leftLayout.addWidget(walinfo)
 
         rightLayout = QtGui.QVBoxLayout()
-        recordlabel = QtGui.QLabel('Records')
+        self.recordlabel = QtGui.QLabel('Records')
         self.recordtable = QtGui.QTableWidget()
 
         #self.connect(self.recordtable, QtCore.SIGNAL('itemClicked(QListWidgetItem *)'), self.recorddump)
         #self.connect(self.recordtable, QtCore.SIGNAL('itemSelectionChanged()'), self.recorddumpkb)
         self.connect(self.recordtable, QtCore.SIGNAL('currentCellChanged(int,int,int,int)'), self.recorddump)
 
-        rightLayout.addWidget(recordlabel)
+        rightLayout.addWidget(self.recordlabel)
         rightLayout.addWidget(self.recordtable)
 
         middleLayout.addLayout(leftLayout)
@@ -105,17 +106,17 @@ class WaliteanUI(QtGui.QWidget):
         btrightLayout = QtGui.QVBoxLayout()
 
 
-        Qcheckheader = QtGui.QCheckBox('tbl/col analysis')
+        self.Qcheckheader = QtGui.QCheckBox('header analysis')
 
-        Qcheckheader.setFixedWidth(150)
+        self.Qcheckheader.setFixedWidth(140)
 
         QAnBtn = QtGui.QPushButton('Analysis', self)
         QAnBtn.setFixedWidth(150)
         self.connect(QAnBtn, QtCore.SIGNAL('clicked()'), self.process)
         self.QProgressbar = QtGui.QProgressBar()
-        self.QProgressbar.setFixedWidth(150)
+        self.QProgressbar.setFixedWidth(140)
 
-        btleftLayout.addWidget(Qcheckheader)
+        btleftLayout.addWidget(self.Qcheckheader)
         btleftLayout.addWidget(QAnBtn)
         btleftLayout.addWidget(self.QProgressbar)
 
@@ -125,6 +126,7 @@ class WaliteanUI(QtGui.QWidget):
         btrightLayout.addWidget(self.hexdump)
 
         bottomLayout.addLayout(btleftLayout)
+        middleLayout.addSpacing(3)
         bottomLayout.addLayout(btrightLayout)
 
         mainLayout.addLayout(topLayout)
@@ -138,6 +140,8 @@ class WaliteanUI(QtGui.QWidget):
         self.filename = QtGui.QFileDialog.getOpenFileName(self, 'Open File', QtCore.QDir.homePath())
         self.Qfilepath.setText(self.filename)
 
+    def headeran(self):
+        print 'header an start'
 
     def process(self):
 
@@ -146,6 +150,16 @@ class WaliteanUI(QtGui.QWidget):
         self.recordtable.clear()
         self.hexdump.clear()
 
+        if self.Qcheckheader.isChecked():
+            print 'Header analysis checked'
+            self.headeran()
+
+        if self.filename == '':     # file open error
+            #msg = QtGui.QMessageBox()
+            #msg.setWindowTitle('File Open Error')
+            #msg.setInformativeText("File open error")
+            #msg.show()
+            return
         self.walite = walitean.WAL_SQLITE()
         self.walite.open(self.filename)
         framelist = self.walite.get_frame_list()
@@ -166,6 +180,7 @@ class WaliteanUI(QtGui.QWidget):
         self.QTableList.clear()
         tablenum = self.d.__len__()
         #print tablenum
+        self.tablelabel.setText('Table List (%d)'%self.d.__len__())
 
         for key, value in self.d.iteritems():
             item = QtGui.QListWidgetItem("Table %s"%key)
@@ -195,6 +210,8 @@ class WaliteanUI(QtGui.QWidget):
 
         # print Column Name
         self.recordtable.setHorizontalHeaderLabels(QtCore.QStringList(columnlist))
+
+        self.recordlabel.setText('Records (%d)'%records.__len__())
 
         rownum = 0
         for record in records:
