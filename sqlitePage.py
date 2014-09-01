@@ -133,7 +133,7 @@ class SQLITE_PAGE():
     def getData(self, celldata, type, size, offset):
         data = celldata[offset:offset + size]
 
-        if type == 'int':
+        if type == 'INT':
             if size == 6:
                 return struct.unpack('=q', data+'\x00\x00')[0]  # signed int (6 or 8 bytes)
             elif size == 7:
@@ -149,11 +149,11 @@ class SQLITE_PAGE():
             elif size == 4:
                 return struct.unpack('=i', data)[0]  # signed int (4 bytes)
 
-        elif type == 'float':
+        elif type == 'INTEGER':
             return struct.unpack('=d', data)[0]
-        elif type == 'blob':
+        elif type == 'BLOB':
             return data
-        elif type == 'text':
+        elif type == 'TEXT':
             return struct.unpack('=%ss' % len(data), data)[0]  # string
 
 
@@ -184,7 +184,10 @@ class SQLITE_PAGE():
 
         for byte in typelist:
             typensize = self.check_type(byte)
-            if typensize[0] != 'Reserved':
+            if typensize[0] == 'Unknown': # NULL SECTION
+                column.append('Unknown')  # column list
+                record.append(0)
+            else:
                 #print 'type: %s, size: %i'%(typensize[0], typensize[1])
                 data = self.getData(celldata, typensize[0], typensize[1], offset)
                 offset += typensize[1]
@@ -200,19 +203,19 @@ class SQLITE_PAGE():
     # return type : <TYPE(text), size(integer)>
     def check_type(self, byte):
         if (byte >= 1) and (byte <= 4):
-            return 'int', byte
+            return 'INT', byte
         elif byte == 5:
-            return 'int', 6
+            return 'INT', 6
         elif byte == 6:
-            return 'int', 8
+            return 'INT', 8
         elif byte == 7:
-            return 'float', 8
+            return 'FLOAT', 8
         elif byte > 12 and (byte % 2) == 0:
-            return 'blob', (byte - 12) / 2
+            return 'BLOB', (byte - 12) / 2
         elif byte > 13 and (byte % 2):
-            return 'text', (byte - 13) / 2
+            return 'TEXT', (byte - 13) / 2
         else:
-            return 'Reserved', 0
+            return 'Unknown', 0
 
 
 

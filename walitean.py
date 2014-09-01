@@ -65,6 +65,7 @@ class WAL_SQLITE():
             print 'invalid input file'
             return 1
         self.fbuf = self.fhandle.read()
+        self.fhandle.close()
         self.get_header()
         return self.fbuf
 
@@ -104,9 +105,15 @@ class WAL_SQLITE():
 
             #hexdump(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize])
 
-            count = count + 1
+            count += 1
         self.count = count
         return frame_list
+
+    def getscheme(self, rootpage):
+        db = sqliteDB.SQLITE(rootpage)
+        scheme = db.getschemata()
+        print scheme
+        return scheme
 
     def process(self, framelist):
         # ref : http://stackoverflow.com/questions/5378231/python-list-to-dictionary-multiple-values-per-key
@@ -114,6 +121,7 @@ class WAL_SQLITE():
 
         total_list = []
 
+        # searching cell list on each page
         for frame in framelist:
             sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
             if sqlite_page.isleaf() == 1:   # If it is leaf page
@@ -140,11 +148,43 @@ class WAL_SQLITE():
                     if findit == 0:
                         total_list.append(record)
 
+        self.rematchingcolumn(total_list)
+
+        # extract key(column type) and value(records) and commit to dictionary type (for separating same column)
         for k, v in total_list:
             d1[k].append(v)
 
+        # remove duplicate list on dictionary
         d = dict((k, tuple(v)) for k, v in d1.iteritems())
+
         return d
+
+    def rematchingcolumn(self, total_list):
+        #print total_list
+        count = 0
+        for column, record in total_list:
+            s = list(column)
+            for prevcolumn, prevrecord in total_list:
+                if len(column) == len(prevcolumn):
+                    sametable = 1
+                    for coloffset in range(0, len(column)):
+                        if ord(column[coloffset]) != (ord(column[coloffset]) & ord(prevcolumn[coloffset])):
+                            if 0 == ((column[coloffset] == 'U') or (prevcolumn[coloffset] == 'U')):
+                                sametable = 0
+                                break
+
+                    if sametable:
+                        #print column, prevcolumn
+                        for coloffset in range(0, len(column)):
+                            if column[coloffset] == 'U':
+                                if prevcolumn[coloffset] != 'U':
+                                    s[coloffset] = prevcolumn[coloffset]
+
+            str = "".join(s)
+            total_list[count][0] = str
+            count += 1
+
+
 
     def write_tsv_file(self, dic, outputfile):
 
@@ -181,85 +221,6 @@ class WAL_SQLITE():
                 file_handler.write('\n')
             file_handler.write('\n')
         file_handler.close()
-
-
-    def createdb(self, dbname):
-        tblset = []
-        db = sqliteDB.SQLITE(dbname)
-        tbllist = db.getDBTableList()
-        for tblname in tbllist:
-            dbdata = []
-
-            columnlist = db.getDBTblInfoList(tblname)
-            #print columnlist
-            dbdata.append(tblname)
-            dbdata.append(columnlist)
-            tblset.append(dbdata)
-
-        con = sqlite3.connect('%s-wal.db'%dbname)
-        cursor = con.cursor()
-
-        for tbl in tblset:
-            query = u"CREATE TABLE "+tbl[0][0]+u"("
-            count = len(tbl[1])
-            for column in tbl[1]:
-                count -= 1
-                query += column[1]
-                query += u" "
-                query += column[2]
-                if count != 0:
-                    query += u", "
-            query += u");"
-            print query
-            try:
-                cursor.execute(query)
-            except sqlite3.OperationalError, e:
-                print e
-        con.close()
-        return tblset
-
-    def write_sqlite_file(self, tblset, dataset, dbname):
-        if len(dataset[0]) == 0:
-            return
-
-        con = sqlite3.connect('%s-wal.db'%dbname)
-        cursor = con.cursor()
-
-        #print dataset[0]
-        # comparing two column list
-        percentagelst = []
-        for tbl in tblset:
-            temp_list = []
-            for column in tbl[1]: # matching list type
-                temp_list.append(column[2])
-            percentagelst.append(comp(temp_list, dataset[0]))
-
-        m = max(percentagelst)
-        result_lst = [i for i, j in enumerate(percentagelst) if j == m]
-        #print tblset[result_lst[0]]
-        query = u"INSERT INTO "+tblset[result_lst[0]][0][0]+u" VALUES ("
-        count = len(tblset[result_lst[0]][1])
-        for record in dataset[1]:
-            #print record
-            count -= 1
-            try:
-                query += str(record)
-            except UnicodeDecodeError, e:
-                print record
-                query += record.decode('utf-8')
-            #except TypeError, e:
-            #    query += buffer(record)
-            if count != 0:
-                query += u", "
-        query += u");"
-        print query
-        try:
-            cursor.execute(query)
-        except sqlite3.OperationalError, e:
-            print e
-
-        con.commit()
-        con.close()
 
     # dictionary
     def print_table(self, dic):
@@ -335,14 +296,16 @@ def DecodeColumn(dataset):
     column_hash = dataset
 
     for type in column_hash:
-        if type == 'i':
-            column.append('int')
-        elif type == 'f':
-            column.append('float')
-        elif type == 'b':
-            column.append('blob')
-        elif type == 't':
-            column.append('text')
+        if type == 'I':
+            column.append('INTEGER')
+        elif type == 'F':
+            column.append('FLOAT')
+        elif type == 'B':
+            column.append('BLOB')
+        elif type == 'T':
+            column.append('TEXT')
+        elif type == 'U':
+            column.append('UNKNOWN')
 
     return column
 

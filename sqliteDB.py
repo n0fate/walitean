@@ -17,58 +17,73 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sqlite3
+import struct
+
+# struct db{
+#   char signature[16];
+#   unsigned short pagesize;
+#   char unknown[6];
+#   unsigned int filechangecounter
+#   unsigned int databasesize;
+#   unsigned int freepageoffset;
+#   unsigned int freepagenumber;
+#   unsigned int schemacookie;
+#   unsigned int shemaformatver;
+#   unsigned int cachesize;
+#   unsigned int vaccumsetting;
+#   unsigned int textencoding;
+#   unsigned int userversion;
+#   unsigned int increvaccummode;
+# }
+
+SQLITEHEADER = '>16sH6xIIIIIIIIIII'
 
 class SQLITE():
-    def __init__(self, filename):
-        self.conn = sqlite3.connect(filename)
-        self.cursor = self.conn.cursor()
+    def __init__(self, buf):
+        self.buf = buf
 
-    def getDBTableList(self):
-        self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tbllist = self.cursor.fetchall()
-        return tbllist
+    def dbheader(self):
+        self.header = struct.unpack(self.buf, SQLITEHEADER)
+        if self.header[0:12] == 'SQLite format':
+            return 1, self.header
+        else:
+            return 0, []
 
-    def getDBTblInfoList(self, tablename):
-        self.cursor.execute("PRAGMA table_info(%s)"%tablename)
-        columnlist = self.cursor.fetchall()
-        return columnlist
+    def getschemata(self):
+        CREATETABLE = 'CREATE TABLE'
+        print 'buf size : %d'%len(self.buf)
+        columnsdic = {}
+        for offset in range(0, len(self.buf)):
+            tablename = ''
+            if CREATETABLE == self.buf[offset:offset+len(CREATETABLE)]:
+                columnlst = []
+                tablename = str(self.buf[offset+len(CREATETABLE):].split('(')[0].replace(' ', ''))
+                strcolumns = self.buf[offset+len(CREATETABLE):].split('(')[1].split(')')[0]
+                print strcolumns
+                primary_key = 0
+                for column in strcolumns.split(','):
+                    columninfo = []
+                    if len(column.split(' ')) >= 3:
+                        columnname = column.split(' ')[1]
+                        columntype = column.split(' ')[2].split('\x00')[0]
+                        if (columntype == 'INTEGER') \
+                            or (columntype == 'TEXT') \
+                            or (columntype == 'BLOB'):
+                            columninfo.append(columnname)
+                            columninfo.append(columntype)
+                    if columninfo.__len__() != 0:
+                        columnlst.append(columninfo)
+                columnlst.append(primary_key)
+                columnsdic[tablename] = columnlst
+        return columnsdic
 
-    def close(self):
-        self.conn.close()
+
+
+
+
 
 def main():
-    tblset = []
-    db = SQLITE("sms.db")
-    tbllist = db.getDBTableList()
-    for tblname in tbllist:
-        dbdata = []
-        #print tblname
-        columnlist = db.getDBTblInfoList(tblname)
-        #print columnlist
-        dbdata.append(tblname)
-        dbdata.append(columnlist)
-        tblset.append(dbdata)
-
-    con = sqlite3.connect('sms-wal.db')
-    cursor = con.cursor()
-
-    for tbl in tblset:
-        query = "CREATE TABLE "+tbl[0][0]+"("
-        count = len(tbl[1])
-        for column in tbl[1]:
-            count -= 1
-            query += column[1]
-            query += " "
-            query += column[2]
-            if count != 0:
-                query += ", "
-        query += ");"
-        print query
-        try:
-            cursor.execute(query)
-        except sqlite3.OperationalError, e:
-            print e
-    con.close()
+    print 'test'
 
 
 
