@@ -153,28 +153,28 @@ class WaliteanUI(QtGui.QWidget):
         column = self.recordtable.currentColumn()
         records = self.d[self.tablename]
         #print row, column
-        self.writelog('Copy data on your clipboard. table: %s row: %d, col: %d'%(self.tablename, row+1, column+1))
+        #self.writelog('Copy data on your clipboard. table: %s row: %d, col: %d'%(self.tablename, row+1, column+1))
         #self.writelog(records[row][column])
         clipboard = QtGui.QApplication.clipboard()
         clipboard.clear()
         clipboard.setText(str(records[row][column]).decode('utf-8'))
-        QtGui.QMessageBox.Information(self, 'Copy to Clipboard', 'Copy data on your clipboard successfully')
+        self.writelog('Copy data to your clipboard successfully')
 
     def SavetoFile(self):
         row = self.recordtable.currentItem().row()
         column = self.recordtable.currentColumn()
         records = self.d[self.tablename]
         #print row, column
-        self.writelog('Save to File - table: %s row: %d, col: %d'%(self.tablename, row+1, column+1))
+        #self.writelog('Save to File - table: %s row: %d, col: %d'%(self.tablename, row+1, column+1))
         #self.writelog(records[row][column])
         savefile = QtGui.QFileDialog.getSaveFileName(self, 'Choose a File', QtCore.QDir.homePath())
         if savefile == '':
-            QtGui.QMessageBox.Warning('Please Select a File')
+            self.writelog('Please Select a File')
             return
         handle = open(savefile, 'wb')
         handle.write(records[row][column])
         handle.close()
-        QtGui.QMessageBox.Information(self, 'Save to File', '%s is saved successfully'%str(savefile))
+        self.writelog('%s is saved successfully'%str(savefile))
 
 
 
@@ -183,8 +183,7 @@ class WaliteanUI(QtGui.QWidget):
         if self.filename != '':
             self.Qfilepath.setText(self.filename)
             self.writelog('Open File : %s'%self.filename)
-        else:
-            QtGui.QMessageBox.Warning(self, 'Open File Failed', 'Please choose a WAL file')
+
 
     def headeran(self):
         self.writelog('Starting Header Analysis')
