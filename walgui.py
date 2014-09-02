@@ -34,6 +34,7 @@ class WaliteanUI(QtGui.QWidget):
         self.setGeometry(300, 300, 800, 600)
         self.move(300, 300)
         self.setWindowTitle('walitean - WAL Analyzer for SQLite by n0fate')
+        self.setWindowIcon(QtGui.QIcon('images/walitean.png'))
 
         # set layout
         mainLayout = QtGui.QVBoxLayout()    # main layout
@@ -84,6 +85,8 @@ class WaliteanUI(QtGui.QWidget):
         self.recordlabel = QtGui.QLabel('Records')
         self.recordtable = QtGui.QTableWidget()
 
+        self.recordtable.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.connect(self.recordtable, QtCore.SIGNAL('customContextMenuRequested(QPoint)'), self.handlerecordmenu)
         #self.connect(self.recordtable, QtCore.SIGNAL('itemClicked(QListWidgetItem *)'), self.recorddump)
         #self.connect(self.recordtable, QtCore.SIGNAL('itemSelectionChanged()'), self.recorddumpkb)
         #self.connect(self.recordtable, QtCore.SIGNAL('currentCellChanged(int,int,int,int)'), self.recorddump)
@@ -131,10 +134,57 @@ class WaliteanUI(QtGui.QWidget):
         self.setLayout(mainLayout)
         self.show()
 
+    def handlerecordmenu(self, pos):
+        #self.writelog('menu')
+        #pos = QtCore.QPoint()
+        #self.position = self.recordtable.indexAt(pos)   # indexing position
+
+        menu = QtGui.QMenu()
+        action1 = menu.addAction('Copy to Clipboard')
+        action1.triggered.connect(self.copytoclipboard)
+
+        action2 = menu.addAction('Save to File')
+        action2.triggered.connect(self.SavetoFile)
+
+        menu.exec_(QtGui.QCursor.pos())
+
+    def copytoclipboard(self):
+        row = self.recordtable.currentItem().row()
+        column = self.recordtable.currentColumn()
+        records = self.d[self.tablename]
+        #print row, column
+        self.writelog('Copy data on your clipboard. table: %s row: %d, col: %d'%(self.tablename, row+1, column+1))
+        #self.writelog(records[row][column])
+        clipboard = QtGui.QApplication.clipboard()
+        clipboard.clear()
+        clipboard.setText(str(records[row][column]).decode('utf-8'))
+        QtGui.QMessageBox.Information(self, 'Copy to Clipboard', 'Copy data on your clipboard successfully')
+
+    def SavetoFile(self):
+        row = self.recordtable.currentItem().row()
+        column = self.recordtable.currentColumn()
+        records = self.d[self.tablename]
+        #print row, column
+        self.writelog('Save to File - table: %s row: %d, col: %d'%(self.tablename, row+1, column+1))
+        #self.writelog(records[row][column])
+        savefile = QtGui.QFileDialog.getSaveFileName(self, 'Choose a File', QtCore.QDir.homePath())
+        if savefile == '':
+            QtGui.QMessageBox.Warning('Please Select a File')
+            return
+        handle = open(savefile, 'wb')
+        handle.write(records[row][column])
+        handle.close()
+        QtGui.QMessageBox.Information(self, 'Save to File', '%s is saved successfully'%str(savefile))
+
+
+
     def openfile(self):
         self.filename = QtGui.QFileDialog.getOpenFileName(self, 'Open File', QtCore.QDir.homePath())
-        self.Qfilepath.setText(self.filename)
-        self.writelog('Open File : %s'%self.filename)
+        if self.filename != '':
+            self.Qfilepath.setText(self.filename)
+            self.writelog('Open File : %s'%self.filename)
+        else:
+            QtGui.QMessageBox.Warning(self, 'Open File Failed', 'Please choose a WAL file')
 
     def headeran(self):
         self.writelog('Starting Header Analysis')
@@ -200,19 +250,22 @@ class WaliteanUI(QtGui.QWidget):
         # Clean-Up
         self.QTableList.clear()
         self.recordtable.clear()
+        self.setprogress(0)
         #self.hexdump.clear()
 
-        if self.filename == '':     # file open error
+        if self.Qfilepath.text() == '':     # file open error
             self.writelog('Click a Open button and select the WAL File')
             return
-        self.walite = walitean.WAL_SQLITE()
-        self.walite.open(self.filename)
-        self.framelist = self.walite.get_frame_list()
+        walite = walitean.WAL_SQLITE()
+        walite.open(self.filename)
+        framelist = walite.get_frame_list()
+        self.setprogress(30)
 
-        self.d = self.walite.process(self.framelist)
+        self.d = walite.process(framelist)
+        self.setprogress(60)
 
-        self.framecount = self.framelist.__len__()
-        self.pagesize = self.walite.pagesize
+        self.framecount = framelist.__len__()
+        self.pagesize = walite.pagesize
 
         if(self.d.__len__() == 0):
             self.writelog('WAL Parsing Failed. Is valid WAL?')
@@ -230,6 +283,11 @@ class WaliteanUI(QtGui.QWidget):
                 self.writelog('Header Analysis Disabled')
                 self.showtablelist()
             #self.showRecords()
+
+        self.setprogress(100)
+
+    def setprogress(self, progress):
+        self.QProgressbar.setValue(progress)
 
 
     def showtablelist(self):
