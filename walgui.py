@@ -58,15 +58,8 @@ class WaliteanUI(QtGui.QWidget):
         wallabel.setFixedWidth(150)
         walinfo = QtGui.QTableView()
         walinfo.setFixedWidth(150)
+
         self.QTableList = QtGui.QListWidget()
-        #QTableList.move(50, 100)
-        #QTableList.setMinimumSize(50, 250)
-
-        #list_ex = [1,2,3]
-        #lv = MyListModel(list_ex)
-
-        #self.QTableList.setModel(lv)
-
         self.QTableList.setFixedWidth(150)
 
         self.connect(self.QTableList, QtCore.SIGNAL('itemClicked(QListWidgetItem *)'), self.showRecords)
@@ -104,6 +97,7 @@ class WaliteanUI(QtGui.QWidget):
 
 
         self.Qcheckheader = QtGui.QCheckBox('Header Analysis')
+        self.Qcheckheader.hide()
 
         self.Qcheckheader.setFixedWidth(140)
 
@@ -169,7 +163,7 @@ class WaliteanUI(QtGui.QWidget):
         #self.writelog(records[row][column])
         savefile = QtGui.QFileDialog.getSaveFileName(self, 'Choose a File', QtCore.QDir.homePath())
         if savefile == '':
-            self.writelog('Please Select a File')
+            self.writelog('Please select a file')
             return
         handle = open(savefile, 'wb')
         handle.write(records[row][column])
