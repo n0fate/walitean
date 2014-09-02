@@ -204,9 +204,9 @@ class WAL_SQLITE():
 
             for row in v:
                 for l in range(0, len(DecColumn)):
-                    if DecColumn[l] == 'blob':
+                    if DecColumn[l] == 'BLOB':
                         file_handler.write('')
-                    elif DecColumn[l] == 'text':
+                    elif DecColumn[l] == 'TEXT':
                         bufstr = ''
                         try:
                             bufstr = str(row[l]).decode('utf8').replace('\n', ' ').replace(',', ' ').encode('utf8')
@@ -238,7 +238,7 @@ class WAL_SQLITE():
             count = 0
             # add column type
             for coltype in decColumn:
-                if coltype == 'blob':   # for remove blob data on stdout
+                if coltype == 'BLOB':   # for remove blob data on stdout
                     offsetlst.append(count) # add column number on offsetlst
                 mszlist.append(-1)
                 count += 1
@@ -248,14 +248,12 @@ class WAL_SQLITE():
             for row in v:
                 line = []
                 for l in range(0, max_len):
-                    if decColumn[l] == 'int':
+                    if decColumn[l] == 'INTEGER':
                         try:
                             line.append('%d'%row[l])
                         except TypeError:
                             line.append('%s'%row[l])
-                    elif decColumn[l] == 'float':
-                        line.append('%f'%row[l])
-                    elif decColumn[l] == 'text':
+                    elif decColumn[l] == 'TEXT':
                         sqlitetext = ''
                         try:
                             sqlitetext = str(row[l]).decode('utf8').replace('\n', ' ').encode('utf8')
