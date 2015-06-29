@@ -16,42 +16,45 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import sqlite3
+#import sqlite3
 import struct
+from ctypes import *
 
-# struct db{
-#   char signature[16];
-#   unsigned short pagesize;
-#   char unknown[6];
-#   unsigned int filechangecounter
-#   unsigned int databasesize;
-#   unsigned int freepageoffset;
-#   unsigned int freepagenumber;
-#   unsigned int schemacookie;
-#   unsigned int shemaformatver;
-#   unsigned int cachesize;
-#   unsigned int vaccumsetting;
-#   unsigned int textencoding;
-#   unsigned int userversion;
-#   unsigned int increvaccummode;
-# }
+class _SQLiteDBHeader(BigEndianStructure):
+    _fields_ = [
+        ('signature', c_char*16),
+        ('pagesize', c_uint16),
+        ('unknown', c_char*6),
+        ('filechangecounter', c_uint32),
+        ('databasesize', c_uint32),
+        ('freepagenumber', c_uint32),
+        ('schemacookie', c_uint32),
+        ('schemaformatver', c_uint32),
+        ('cachesize', c_uint32),
+        ('vaccumsetting', c_uint32),
+        ('textencoding', c_uint32),
+        ('userversion', c_uint32),
+        ('increvaccummode', c_uint32)
+    ]
 
-SQLITEHEADER = '>16sH6xIIIIIIIIIII'
+def _memcpy(buf, fmt):
+    return cast(c_char_p(buf), POINTER(fmt)).contents
+
 
 class SQLITE():
     def __init__(self, buf):
         self.buf = buf
 
     def dbheader(self):
-        self.header = struct.unpack(self.buf, SQLITEHEADER)
-        if self.header[0:12] == 'SQLite format':
+        self.header = _memcpy(self.buf, _SQLiteDBHeader)
+        if self.header.signature[0:12] == 'SQLite format':
             return 1, self.header
         else:
             return 0, []
 
     def getschemata(self):
         CREATETABLE = 'CREATE TABLE'
-        print 'buf size : %d'%len(self.buf)
+        #print 'buf size : %d'%len(self.buf)
         columnsdic = {}
         for offset in range(0, len(self.buf)):
             tablename = ''
@@ -59,7 +62,7 @@ class SQLITE():
                 columnlst = []
                 tablename = str(self.buf[offset+len(CREATETABLE):].split('(')[0].replace(' ', ''))
                 strcolumns = self.buf[offset+len(CREATETABLE):].split('(')[1].split(')')[0]
-                print strcolumns
+                #print strcolumns
                 primary_key = 0
                 for column in strcolumns.split(','):
                     columninfo = []

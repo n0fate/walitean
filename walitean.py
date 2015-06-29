@@ -18,38 +18,36 @@
 
 import argparse
 import os
-from binascii import hexlify, unhexlify
-from sys import argv, exit
-import struct
 import sqlitePage
 import sqliteDB
 from operator import eq
 from collections import defaultdict
-from tableprint import columnprint
+from ctypes import *
 
-#struct Write Ahead Log file header {
-# uint signature; // 0x377f0682 or 0x377f0683
-# uint version; // 0x002de218 -> 3007000
-# uint pagesize;
-# uint sequencenum; // starting at 0
-# uint salt1; // incremented with every checkpoint
-# uint salt2; // regenerated with every checkpoint
-# uint checksum1; // checksum1
-# uint checksum2; // checksum2
-# }
-FILE_HEADER = '>IIIIIIII'
-FILE_HEADER_SIZE = 32
+class _WALFileHeader(BigEndianStructure):
+    _fields_ = [
+        ('Signature', c_uint32),
+        ('Version', c_uint32),
+        ('PageSize', c_uint32),
+        ('SequenceNumber', c_uint32),
+        ('Salt1', c_uint32),
+        ('Salt2', c_uint32),
+        ('CheckSum1', c_uint32),
+        ('Checksum2', c_uint32)
+    ]
 
-#struct Write Ahead Log frame header {
-# uint dbpagenum; //
-# uint endoftransaction;
-# uint salt1; // incremented with every checkpoint
-# uint salt2; // regenerated with every checkpoint
-# uint checksum1; // checksum1
-# uint checksum2; // checksum2
-# }
-FRAME_HEADER = '>IIIIII'
-FRAME_HEADER_SIZE = 24
+class _WALFrameHeader(BigEndianStructure):
+    _fields_ = [
+        ('DBPageNumber', c_uint32),
+        ('EndofTransaction', c_uint32),
+        ('Salt1', c_uint32),
+        ('Salt2', c_uint32),
+        ('Checksum1', c_uint32),
+        ('Checksum2', c_uint32)
+    ]
+
+def _memcpy(buf, fmt):
+    return cast(c_char_p(buf), POINTER(fmt)).contents
 
 class WAL_SQLITE():
     def __init__(self):
@@ -72,35 +70,29 @@ class WAL_SQLITE():
 
     ## get WAL File Header
     def get_header(self):
-        if self.fbuf == '':
-            return 1
-        
-        fileheader = struct.unpack(FILE_HEADER, self.fbuf[0:FILE_HEADER_SIZE])
-        #print '%x'%fileheader[0]
+        fileheader = _memcpy(self.fbuf[:sizeof(_WALFileHeader)], _WALFileHeader)
 
-        if (fileheader[0] != 0x377f0682) and (fileheader[0] != 0x377f0683):
+        if (fileheader.Signature != 0x377f0682) and (fileheader.Signature != 0x377f0683):
             print 'invalid file format'
-            return 1
-        self.pagesize = fileheader[2]
-        self.cpseqnum = fileheader[3]
-        #print '[+] PageSize: %x'%self.pagesize 
-        #print '[+] Checkpoint Sequence Number: %d'%fileheader[3]
-        return struct.unpack(FILE_HEADER, self.fbuf[0:FILE_HEADER_SIZE])
+            return None
+        self.pagesize = fileheader.PageSize
+        self.cpseqnum = fileheader.SequenceNumber
+        return fileheader
 
     def get_frame_list(self):
         frame_list = []
-        frame_buf = self.fbuf[FILE_HEADER_SIZE:]
+        frame_buf = self.fbuf[sizeof(_WALFileHeader):]
         #print 'frame size: %x'%len(self.fbuf)
         count = 1
-        for offset in range(0, len(frame_buf), self.pagesize+FRAME_HEADER_SIZE):
+        for offset in range(0, len(frame_buf), self.pagesize + sizeof(_WALFrameHeader)):
             #print '[+] frame %d, offset : %x'%(count, offset+FILE_HEADER_SIZE)
             frame_element = []
-            frameheader = struct.unpack(FRAME_HEADER, frame_buf[offset:offset+FRAME_HEADER_SIZE])
-            #print ' [-] Frame Number : %d, endoftransaction: %d'%(frameheader[0], frameheader[1])
+            frameheader = _memcpy(frame_buf[offset:offset+sizeof(_WALFrameHeader)], _WALFrameHeader)
+            #print ' [-] Frame Number : %d, endoftransaction: %d'%(frameheader.DBPageNumber, frameheader.EndofTransaction)
             #print ' [-] Sequence Number : %d'%frameheader[2]
             #print ' [-] Sequence Number : %d'%frameheader[3]
             frame_element.append(frameheader) #frame header
-            frame_element.append(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize]) # page
+            frame_element.append(frame_buf[offset+sizeof(_WALFrameHeader):offset+sizeof(_WALFrameHeader)+self.pagesize]) # page
             frame_list.append(frame_element)
             #print ' [-] frame size : %x'%len(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize])
 
@@ -168,7 +160,7 @@ class WAL_SQLITE():
             for prevcolumn, prevrecord in total_list:
                 if len(column) == len(prevcolumn):
                     sametable = 1
-                    for coloffset in range(0, len(column)):
+                    for coloffset in xrange(len(column)):
                         if ord(column[coloffset]) != (ord(column[coloffset]) & ord(prevcolumn[coloffset])):
                             if 0 == ((column[coloffset] == 'U') or (prevcolumn[coloffset] == 'U')):
                                 sametable = 0
@@ -198,10 +190,9 @@ class WAL_SQLITE():
             tablename = 'unknown%d'%tablenum
             decColumn = DecodeColumn(enccolumn)
             columnlist = []
-            recordlist = []
             count = 0
             for doffset in xrange(len(decColumn)):
-                column = ['', 'Unknown%d'%count, decColumn[doffset]]
+                column = ['', 'unknown%d'%count, decColumn[doffset]]
                 count += 1
                 columnlist.append(column)
 
@@ -222,10 +213,9 @@ def comp(dbtbl, waltbl):
 
 
 def EncodeColumn(dataset):
-
     column_hash = ''
     for type in dataset[0]:
-        column_hash += type[0] # if type[0] is 'i', type is 'int'
+        column_hash += type[0]  # if type[0] is 'i', type is 'int'
 
     record = []
     record.append(column_hash)
@@ -237,28 +227,25 @@ def DecodeColumn(dataset):
     column = []
     column_hash = dataset
 
-    for type in column_hash:
-        if type == 'I':
+    for columntype in column_hash:
+        if columntype == 'I':
             column.append('INTEGER')
-        elif type == 'F':
+        elif columntype == 'F':
             column.append('FLOAT')
-        elif type == 'B':
+        elif columntype == 'B':
             column.append('BLOB')
-        elif type == 'T':
+        elif columntype == 'T':
             column.append('TEXT')
-        elif type == 'U':
+        elif columntype == 'U':
             column.append('UNKNOWN')
 
     return column
 
 
 def main():
-    inputfile = ''
-    
-
     parser = argparse.ArgumentParser(description='Written-Ahead Log Analyzer for SQLite by @n0fate')
     parser.add_argument('-f', '--file', nargs=1, help='WAL file(*-wal)', required=True)
-    parser.add_argument('-x', '--exportfile', nargs=1, help='Export Filename(CSV format, Optional)', required=False)
+    parser.add_argument('-x', '--exportfile', nargs=1, help='Export Filename(CSV format, Optional)', required=True)
     
     args = parser.parse_args()
 
@@ -267,21 +254,20 @@ def main():
     if os.path.exists(inputfile) is False:
         print '[!] File is not exists'
         parser.print_help()
-        sys.exit()
-
+        exit()
     
     wal_class = WAL_SQLITE()
     wal_class.open(inputfile)
-    frame_list = wal_class.get_frame_list()     # get a list of wal frame
+    frame_list = wal_class.get_frame_list()
+    for data in frame_list:
+        if data[0].DBPageNumber == 1:
+            wal_class.getscheme(data[1])
+            return
+    
     d = wal_class.process(frame_list)
-
-    if args.exportfile is None:
-        print '[*] Output Type : Standard Output(Terminal)'
-        wal_class.print_table(d)
-    else:
-        print '[*] Output Type : SQLite DB'
-        print '[*] File Name : %s'%args.exportfile[0]
-        wal_class.exportSqliteDB(args.exportfile[0], d)
+    print '[*] Output Type : SQLite DB'
+    print '[*] File Name : %s' % args.exportfile[0]
+    wal_class.exportSqliteDB(args.exportfile[0], d)
 
 if __name__ == "__main__":
     main()
