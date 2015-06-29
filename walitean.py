@@ -16,12 +16,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import getopt
+import argparse
+import os
+from binascii import hexlify, unhexlify
 from sys import argv, exit
 import struct
 import sqlitePage
 import sqliteDB
-import sqlite3
 from operator import eq
 from collections import defaultdict
 from tableprint import columnprint
@@ -184,91 +185,34 @@ class WAL_SQLITE():
             total_list[count][0] = str
             count += 1
 
+    def exportSqliteDB(self, dbname, dic):
+        from exportdb import ExportSQLite
+        export = ExportSQLite()
+        if export.createDB(dbname) is False:
+            print '[!] File is Exists'
+            return
 
+        tablenum = 0
+        for enccolumn, data in dic.iteritems():
 
-    def write_tsv_file(self, dic, outputfile):
-
-        try:
-            file_handler = open(outputfile, 'a')
-
-        except:
-            print 'outputfile open failed'
-            return 1
-
-        for k, v in dic.iteritems():
-            DecColumn = DecodeColumn(k)
-            for colvalue in DecColumn:
-                file_handler.write(colvalue)
-                file_handler.write(',')
-            file_handler.write('\n')
-
-            for row in v:
-                for l in range(0, len(DecColumn)):
-                    if DecColumn[l] == 'BLOB':
-                        file_handler.write('')
-                    elif DecColumn[l] == 'TEXT':
-                        bufstr = ''
-                        try:
-                            bufstr = str(row[l]).decode('utf8').replace('\n', ' ').replace(',', ' ').encode('utf8')
-                        except UnicodeEncodeError:
-                            bufstr = str(row[l]).replace('\n', ' ').replace(',', ' ')
-
-                        file_handler.write(bufstr)
-                    else:
-                        file_handler.write(str(row[l]))
-
-                    file_handler.write(',')
-                file_handler.write('\n')
-            file_handler.write('\n')
-        file_handler.close()
-
-    # dictionary
-    def print_table(self, dic):
-
-        for k, v in dic.iteritems():
-            decColumn = []
-            mszlist = []    # optional max size list
-
-            decColumn = DecodeColumn(k)
-            max_len = len(decColumn)
-            offsetlst = []
-
-            #print decColumn
-
+            tablename = 'unknown%d'%tablenum
+            decColumn = DecodeColumn(enccolumn)
+            columnlist = []
+            recordlist = []
             count = 0
-            # add column type
-            for coltype in decColumn:
-                if coltype == 'BLOB':   # for remove blob data on stdout
-                    offsetlst.append(count) # add column number on offsetlst
-                mszlist.append(-1)
+            for doffset in xrange(len(decColumn)):
+                column = ['', 'Unknown%d'%count, decColumn[doffset]]
                 count += 1
+                columnlist.append(column)
 
-            #print decColumn
-            contentlist = []
-            for row in v:
-                line = []
-                for l in range(0, max_len):
-                    if decColumn[l] == 'INTEGER':
-                        try:
-                            line.append('%d'%row[l])
-                        except TypeError:
-                            line.append('%s'%row[l])
-                    elif decColumn[l] == 'TEXT':
-                        sqlitetext = ''
-                        try:
-                            sqlitetext = str(row[l]).decode('utf8').replace('\n', ' ').encode('utf8')
-                        except:
-                            sqlitetext = str(row[l]).replace('\n', '')
-                        line.append('%s'%sqlitetext)
-                    else:   # blob
-                        line.append('')
+            tablenum += 1
+            export.createTable(tablename, columnlist)
 
-                contentlist.append(line)
-                #print row
+            for row in data:
+                export.insertRecord(tablename, row)
 
-            columnprint(decColumn, contentlist, mszlist)
-            print ''
-
+        export.commit()
+        export.close()
 
 
 def comp(dbtbl, waltbl):
@@ -308,46 +252,22 @@ def DecodeColumn(dataset):
     return column
 
 
-def usage():
-    print 'Copyright by n0fate (n0fate@n0fate.com)'
-    print 'python walitean.py [-i SQLITE WAL FILE] [-f TYPE(raw, csv)] [-o FILENAME(if type is csv)]'
-
 def main():
     inputfile = ''
-    outputfile = ''
-    outputtype = ''     # file type
     
-    try:
-        option, args = getopt.getopt(argv[1:], 'i:o:f:')
 
-    except getopt.GetoptError, err:
-        usage()
-        exit()
+    parser = argparse.ArgumentParser(description='Written-Ahead Log Analyzer for SQLite by @n0fate')
+    parser.add_argument('-f', '--file', nargs=1, help='WAL file(*-wal)', required=True)
+    parser.add_argument('-x', '--exportfile', nargs=1, help='Export Filename(CSV format, Optional)', required=False)
     
-    #print option
-    for op, p, in option:
-        if op in '-i':
-            inputfile = p
-        elif op in '-o':
-            outputfile = p
-        elif op in '-f':
-            outputtype = p
-        else:
-            print 'invalid option'
-            exit()
-    
-    try:
-        if (inputfile == '') or (outputtype == ''):
-            usage()
-            exit()
+    args = parser.parse_args()
 
-        elif outputtype == 'csv' and outputfile == '':
-            usage()
-            exit()
-    
-    except IndexError:
-        usage()
-        exit()
+    inputfile = args.file[0]
+
+    if os.path.exists(inputfile) is False:
+        print '[!] File is not exists'
+        parser.print_help()
+        sys.exit()
 
     
     wal_class = WAL_SQLITE()
@@ -355,13 +275,13 @@ def main():
     frame_list = wal_class.get_frame_list()     # get a list of wal frame
     d = wal_class.process(frame_list)
 
-    if outputtype == 'raw':
-        print '[+] Output Type : Standard Output(Terminal)'
+    if args.exportfile is None:
+        print '[*] Output Type : Standard Output(Terminal)'
         wal_class.print_table(d)
-    elif outputtype == 'csv':
-        print '[+] Output Type : CSV(Comma Separated Values)'
-        print '[+] File Name : %s'%outputfile
-        wal_class.write_tsv_file(d, outputfile)
+    else:
+        print '[*] Output Type : SQLite DB'
+        print '[*] File Name : %s'%args.exportfile[0]
+        wal_class.exportSqliteDB(args.exportfile[0], d)
 
 if __name__ == "__main__":
     main()
