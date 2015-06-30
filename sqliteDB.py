@@ -67,19 +67,27 @@ class SQLITE():
                 #print ''
                 #primary_key = 0
                 for column in strcolumns.split(','):
+                    try:
+                        column.index('AUTOINCREMENT')
+                        continue
+                    except ValueError:
+                        pass
+                    try:
+                        column.index('UNIQUE (')
+                        continue
+                    except ValueError:
+                        pass
                     columninfo = []
                     if len(column.split(' ')) >= 3:
                         columnname = column.split(' ')[1]
                         columntype = column.split(' ')[2]
-                        if (columntype == 'INTEGER') \
-                            or (columntype == 'TEXT') \
-                            or (columntype == 'BLOB'):
-                            columninfo.append(columnname)
-                            columninfo.append(columntype)
+                        columninfo.append(columnname)
+                        columninfo.append(columntype)
                     if columninfo.__len__() != 0:
                         columnlst.append(columninfo)
                 #columnlst.append(primary_key)
-                columnsdic[tablename] = columnlst
+                if len(columnlst):
+                    columnsdic[tablename] = columnlst
         return columnsdic
 
 

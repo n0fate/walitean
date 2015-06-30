@@ -194,7 +194,6 @@ class WAL_SQLITE():
 
             for tbname, columninfo in schema.items():
                 columncount = len(columninfo)
-                #print columncount
                 if columncount == len(waltbname):
                     print ' [-] %s is %s' % (waltbname, tbname)
                     recordslist.append(columninfo)
@@ -205,19 +204,19 @@ class WAL_SQLITE():
                     break
 
             # round 2
-            if findit == False:
-                for tbname, columninfo in schema.items():
-                    decColumn = DecodeColumn(waltbname)
-                    import difflib
-                    sm = difflib.SequenceMatcher(None, columninfo, decColumn)
-                    if sm.ratio() <= 0.90:
-                        print ' [-] %s is %s (%d%%)' % (waltbname, tbname, sm.ratio()*100)
-                        recordslist.append(columninfo)
-                        recordslist.append(walrecords)
-                        recordslist.append(True)
-                        newdbinfo[tbname] = recordslist
-                        findit = True
-                        break
+            # if findit == False:
+            #     for tbname, columninfo in schema.items():
+            #         decColumn = DecodeColumn(waltbname)
+            #         import difflib
+            #         sm = difflib.SequenceMatcher(None, columninfo, decColumn)
+            #         if sm.ratio() <= 0.90:
+            #             print ' [-] %s is %s (%d%%)' % (waltbname, tbname, sm.ratio()*100)
+            #             recordslist.append(columninfo)
+            #             recordslist.append(walrecords)
+            #             recordslist.append(True)
+            #             newdbinfo[tbname] = recordslist
+            #             findit = True
+            #             break
 
             # round 3
             if findit == False:
