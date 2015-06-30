@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import struct
 from ctypes import *
 
 class _SQLiteDBHeader(BigEndianStructure):
@@ -53,19 +52,17 @@ class SQLITE():
 
     def getschemata(self):
         CREATETABLE = 'CREATE TABLE'
-        #print 'buf size : %d'%len(self.buf)
         columnsdic = {}
         for offset in xrange(len(self.buf)):
             tablename = ''
             if CREATETABLE == self.buf[offset:offset+len(CREATETABLE)]:
                 columnlst = []
-                tablename = str(self.buf[offset+len(CREATETABLE):].split('(')[0].replace(' ', ''))
+                tablename = str(self.buf[offset+len(CREATETABLE):].split(' ')[1].split('(')[0].replace(' ', ''))
                 strcolumns = str(self.buf[offset+len(CREATETABLE):].split('(')[1].split(')')[0])
-                #print strcolumns
                 if strcolumns[0] == ' ':    # remove byte if first byte is space
                     strcolumns = strcolumns[1:]
-                #print ''
-                #primary_key = 0
+
+                strcolumns = strcolumns.replace(', UNIQUE','')
                 for column in strcolumns.split(','):
                     try:
                         column.index('AUTOINCREMENT')
@@ -78,14 +75,15 @@ class SQLITE():
                     except ValueError:
                         pass
                     columninfo = []
-                    if len(column.split(' ')) >= 3:
-                        columnname = column.split(' ')[1]
-                        columntype = column.split(' ')[2]
+                    if column[0] == ' ':
+                        column = column[1:]
+                    if len(column.split(' ')) >= 2:
+                        columnname = column.split(' ')[0]
+                        columntype = column.split(' ')[1]
                         columninfo.append(columnname)
                         columninfo.append(columntype)
                     if columninfo.__len__() != 0:
                         columnlst.append(columninfo)
-                #columnlst.append(primary_key)
                 if len(columnlst):
                     columnsdic[tablename] = columnlst
         return columnsdic

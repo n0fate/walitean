@@ -185,7 +185,6 @@ class WAL_SQLITE():
         #print '[+] Find DB table schema'
         newdbinfo = {}
         for waltbname, walrecords in wallist.items():
-            #print waltbname, len(waltbname)
             recordslist = []
             findit = False
 
@@ -291,12 +290,12 @@ def main():
     wal_class.open(inputfile)
     frame_list = wal_class.get_frame_list()
     DBSchema = {}
-    print '[+] Check a root-page at WAL'
+    print '[+] Check a root-page in WAL'
     for data in frame_list:
         if data[0].DBPageNumber == 1:
             DBSchema = wal_class.getscheme(data[1])
             if len(DBSchema):
-                print ' [-] Find DB Schema'
+                print ' [-] Find DB Schema at root-page'
                 break
 
     if len(DBSchema) == 0 and args.maindb is not None:
