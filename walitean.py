@@ -82,21 +82,13 @@ class WAL_SQLITE():
     def get_frame_list(self):
         frame_list = []
         frame_buf = self.fbuf[sizeof(_WALFileHeader):]
-        #print 'frame size: %x'%len(self.fbuf)
         count = 1
         for offset in range(0, len(frame_buf), self.pagesize + sizeof(_WALFrameHeader)):
-            #print '[+] frame %d, offset : %x'%(count, offset+FILE_HEADER_SIZE)
             frame_element = []
             frameheader = _memcpy(frame_buf[offset:offset+sizeof(_WALFrameHeader)], _WALFrameHeader)
-            #print ' [-] Frame Number : %d, endoftransaction: %d'%(frameheader.DBPageNumber, frameheader.EndofTransaction)
-            #print ' [-] Sequence Number : %d'%frameheader[2]
-            #print ' [-] Sequence Number : %d'%frameheader[3]
             frame_element.append(frameheader) #frame header
             frame_element.append(frame_buf[offset+sizeof(_WALFrameHeader):offset+sizeof(_WALFrameHeader)+self.pagesize]) # page
             frame_list.append(frame_element)
-            #print ' [-] frame size : %x'%len(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize])
-
-            #hexdump(frame_buf[offset+FRAME_HEADER_SIZE:offset+FRAME_HEADER_SIZE+self.pagesize])
 
             count += 1
         self.count = count
@@ -105,7 +97,7 @@ class WAL_SQLITE():
     def getscheme(self, rootpage):
         db = sqliteDB.SQLITE(rootpage)
         scheme = db.getschemata()
-        print scheme
+        #print scheme
         return scheme
 
     def process(self, framelist):
@@ -118,8 +110,6 @@ class WAL_SQLITE():
         for frame in framelist:
             sqlite_page = sqlitePage.SQLITE_PAGE(frame[1])
             if sqlite_page.isleaf() == 1:   # If it is leaf page
-                #print 'leaf node : frame %i'%frame[0][0]
-                #hexdump(frame[1])
                 celllst = sqlite_page.getcelloffset()   # Getting a list of cell offset
 
                 for celloffset in celllst:
@@ -153,7 +143,6 @@ class WAL_SQLITE():
         return d
 
     def rematchingcolumn(self, total_list):
-        #print total_list
         count = 0
         for column, record in total_list:
             s = list(column)
@@ -167,7 +156,6 @@ class WAL_SQLITE():
                                 break
 
                     if sametable:
-                        #print column, prevcolumn
                         for coloffset in range(0, len(column)):
                             if column[coloffset] == 'U':
                                 if prevcolumn[coloffset] != 'U':
@@ -177,33 +165,76 @@ class WAL_SQLITE():
             total_list[count][0] = str
             count += 1
 
-    def exportSqliteDB(self, dbname, dic):
+    def exportSqliteDB(self, dbname, newdbinfo):
         from exportdb import ExportSQLite
         export = ExportSQLite()
         if export.createDB(dbname) is False:
             print '[!] File is Exists'
             return
 
-        tablenum = 0
-        for enccolumn, data in dic.iteritems():
+        for tbname, recordsinfo in newdbinfo.iteritems():
+            export.createTable(tbname, recordsinfo[0])
 
-            tablename = 'unknown%d'%tablenum
-            decColumn = DecodeColumn(enccolumn)
-            columnlist = []
-            count = 0
-            for doffset in xrange(len(decColumn)):
-                column = ['', 'unknown%d'%count, decColumn[doffset]]
-                count += 1
-                columnlist.append(column)
-
-            tablenum += 1
-            export.createTable(tablename, columnlist)
-
-            for row in data:
-                export.insertRecord(tablename, row)
+            for row in recordsinfo[1]:
+                export.insertRecord(tbname, row)
 
         export.commit()
         export.close()
+
+    def findvalidcolumninfo(self, schema, wallist):
+        #print '[+] Find DB table schema'
+        newdbinfo = {}
+        for waltbname, walrecords in wallist.items():
+            #print waltbname, len(waltbname)
+            recordslist = []
+            findit = False
+
+            #columnname = columninfo[0]
+            #columntype = columninfo[1]
+
+            for tbname, columninfo in schema.items():
+                columncount = len(columninfo)
+                #print columncount
+                if columncount == len(waltbname):
+                    print ' [-] %s is %s' % (waltbname, tbname)
+                    recordslist.append(columninfo)
+                    recordslist.append(walrecords)
+                    recordslist.append(True)
+                    newdbinfo[tbname] = recordslist
+                    findit = True
+                    break
+
+            # round 2
+            if findit == False:
+                for tbname, columninfo in schema.items():
+                    decColumn = DecodeColumn(waltbname)
+                    import difflib
+                    sm = difflib.SequenceMatcher(None, columninfo, decColumn)
+                    if sm.ratio() <= 0.90:
+                        print ' [-] %s is %s (%d%%)' % (waltbname, tbname, sm.ratio()*100)
+                        recordslist.append(columninfo)
+                        recordslist.append(walrecords)
+                        recordslist.append(True)
+                        newdbinfo[tbname] = recordslist
+                        findit = True
+                        break
+
+            # round 3
+            if findit == False:
+                decColumn = DecodeColumn(waltbname)
+                newcolumninfo = []
+                for columnoffset in xrange(len(decColumn)):
+                    dummy = []
+                    dummy.append('unknown%d' % columnoffset)
+                    dummy.append(decColumn[columnoffset])
+                    newcolumninfo.append(dummy)
+                print ' [-] Could not find table schema %s'%waltbname
+                newdbinfo[waltbname] = [newcolumninfo, walrecords, False]
+
+        return newdbinfo    # key is tablename, value is list(columninfo, records)
+
+
+
 
 
 def comp(dbtbl, waltbl):
@@ -245,7 +276,8 @@ def DecodeColumn(dataset):
 def main():
     parser = argparse.ArgumentParser(description='Written-Ahead Log Analyzer for SQLite by @n0fate')
     parser.add_argument('-f', '--file', nargs=1, help='WAL file(*-wal)', required=True)
-    parser.add_argument('-x', '--exportfile', nargs=1, help='Export Filename(CSV format, Optional)', required=True)
+    parser.add_argument('-x', '--exportfile', nargs=1, help='SQlite filename', required=True)
+    parser.add_argument('-m', '--maindb', nargs=1, help='Main DB File (Optional)', required=False)
     
     args = parser.parse_args()
 
@@ -259,15 +291,33 @@ def main():
     wal_class = WAL_SQLITE()
     wal_class.open(inputfile)
     frame_list = wal_class.get_frame_list()
+    DBSchema = {}
+    print '[+] Check a root-page at WAL'
     for data in frame_list:
         if data[0].DBPageNumber == 1:
-            wal_class.getscheme(data[1])
-            return
+            DBSchema = wal_class.getscheme(data[1])
+            if len(DBSchema):
+                print ' [-] Find DB Schema'
+                break
+
+    if len(DBSchema) == 0 and args.maindb is not None:
+        print '[*] Could not find root-page in WAL. Now we are checking a Main DB'
+        opendb = open(args.maindb[0], 'rb')
+        buf = opendb.read(4096)
+        DBSchema = wal_class.getscheme(buf)
+
+        if len(DBSchema):
+            print ' [-] Find DB Schema at %s'%args.maindb[0]
+        else:
+            print ' [-] Could not find DB Schema at %s'%args.maindb[0]
     
     d = wal_class.process(frame_list)
+
+    newdbinfo = wal_class.findvalidcolumninfo(DBSchema, d)
+
     print '[*] Output Type : SQLite DB'
     print '[*] File Name : %s' % args.exportfile[0]
-    wal_class.exportSqliteDB(args.exportfile[0], d)
+    wal_class.exportSqliteDB(args.exportfile[0], newdbinfo)
 
 if __name__ == "__main__":
     main()

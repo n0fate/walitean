@@ -60,14 +60,17 @@ class SQLITE():
             if CREATETABLE == self.buf[offset:offset+len(CREATETABLE)]:
                 columnlst = []
                 tablename = str(self.buf[offset+len(CREATETABLE):].split('(')[0].replace(' ', ''))
-                strcolumns = self.buf[offset+len(CREATETABLE):].split('(')[1].split(')')[0]
+                strcolumns = str(self.buf[offset+len(CREATETABLE):].split('(')[1].split(')')[0])
                 #print strcolumns
-                primary_key = 0
+                if strcolumns[0] == ' ':    # remove byte if first byte is space
+                    strcolumns = strcolumns[1:]
+                #print ''
+                #primary_key = 0
                 for column in strcolumns.split(','):
                     columninfo = []
                     if len(column.split(' ')) >= 3:
                         columnname = column.split(' ')[1]
-                        columntype = column.split(' ')[2].split('\x00')[0]
+                        columntype = column.split(' ')[2]
                         if (columntype == 'INTEGER') \
                             or (columntype == 'TEXT') \
                             or (columntype == 'BLOB'):
@@ -75,7 +78,7 @@ class SQLITE():
                             columninfo.append(columntype)
                     if columninfo.__len__() != 0:
                         columnlst.append(columninfo)
-                columnlst.append(primary_key)
+                #columnlst.append(primary_key)
                 columnsdic[tablename] = columnlst
         return columnsdic
 

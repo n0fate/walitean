@@ -23,9 +23,9 @@ class ExportSQLite:
 		sql += ' ('
 		count = 0
 		for column in columnlist:
-			if column[1] is None or column[2] is None:
+			if column[0] is None or column[1] is None:
 				continue
-			sql += ' ' + column[1] + ' ' + column[2]	# column name
+			sql += ' ' + column[0] + ' ' + column[1]	# column name
 			count += 1
 
 			if len(columnlist) > count:
