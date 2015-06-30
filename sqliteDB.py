@@ -16,7 +16,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#import sqlite3
 import struct
 from ctypes import *
 
@@ -56,7 +55,7 @@ class SQLITE():
         CREATETABLE = 'CREATE TABLE'
         #print 'buf size : %d'%len(self.buf)
         columnsdic = {}
-        for offset in range(0, len(self.buf)):
+        for offset in xrange(len(self.buf)):
             tablename = ''
             if CREATETABLE == self.buf[offset:offset+len(CREATETABLE)]:
                 columnlst = []
