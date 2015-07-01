@@ -173,6 +173,8 @@ class WAL_SQLITE():
             return
 
         for tbname, recordsinfo in newdbinfo.iteritems():
+            if len(recordsinfo[0]) is 0:
+                continue
             export.createTable(tbname, recordsinfo[0])
 
             for row in recordsinfo[1]:
@@ -308,9 +310,11 @@ def main():
             print ' [-] Find DB Schema at %s'%args.maindb[0]
         else:
             print ' [-] Could not find DB Schema at %s'%args.maindb[0]
-    
+
+    print '[*] Processing..'
     d = wal_class.process(frame_list)
 
+    print '[*] Schema Matching..'
     newdbinfo = wal_class.findvalidcolumninfo(DBSchema, d)
 
     print '[*] Output Type : SQLite DB'

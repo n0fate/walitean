@@ -33,7 +33,7 @@ class ExportSQLite:
                 sql += ','
 
         sql += ' )'
-        # print sql
+
         self.cursor.execute(sql)
         self.conn.commit()
 
